@@ -29,7 +29,7 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg | grep -q  "0.
 fi
 
 # if no server version available, then initial configure and set to version 0.01
-if !sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg; then
+if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	echo "####install snips####"
 	sudo apt-get -y install apt-transport-https
 	sudo apt-get update
@@ -102,12 +102,12 @@ fi
 
 #version 0.02
 if sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg | grep -q  "0.01"; then
- 
+ echo  "update 0.01"
 # sudo sed 's/.*attr global serverVersion.*/attr global serverVersion 0.02/' /opt/fhem/fhem.cfg
 else
- echo  no update
-fi
+ echo  "no update"
 
+fi
 
 
 
