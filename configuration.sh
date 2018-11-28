@@ -104,8 +104,7 @@ fi
 
 #version 0.02
 if sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg | grep -q  "0.01"; then
- echo  "update 0.01"
-  echo  "update 0.011"
+ echo  "update 0.03"
  echo -en "save\nquit\n" | nc localhost 7072
 # sudo sed 's/.*attr global serverVersion.*/attr global serverVersion 0.02/' /opt/fhem/fhem.cfg
 else
