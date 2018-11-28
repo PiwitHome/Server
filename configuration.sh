@@ -70,7 +70,8 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	sudo apt-get -y install libcrypt-cbc-perl
 	sudo apt-get -y install libcrypt-rijndael-perl
 	sudo apt -y install libssl-dev
-	sudo cpan Crypt/OpenSSL/AES.pm
+	export PERL_MM_USE_DEFAULT=1
+	sudo echo "yes" | sudo cpan Crypt/OpenSSL/AES.pm
 	echo "####configure broadlink####"
 	echo -en '\
 	define nBroadlinkUpdateIP notify ipScanner:.*_macVendor:.*Broadlin.* {my $macvendortomac=$EVTPART0;;$macvendortomac=~s/_macVendor:/_macAddress/g;;my $ip=$macvendortomac;;$ip=~s/_macAddress//g;;my $mac=ReadingsVal("ipScanner",$macvendortomac,"noIP");;my $broadlinkname="Broadlink_".$mac;;$broadlinkname=~s/:/_/g;;if(exists($defs{$broadlinkname})&&InternalVal($broadlinkname,"HOST","noIP") ne $ip){fhem("modify ".$broadlinkname." ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;}elsif(!exists($defs{$broadlinkname})){fhem("define ".$broadlinkname." Broadlink ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;};;};\
@@ -91,11 +92,12 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	attr nYeelightUpdateIP userattr piwit;\
 	\nquit\n' | nc localhost 7072
 	
-		
-	# set first serverVersion
+	# set first serverVersion :)
 	echo -en "attr global userattr serverVersion\nquit\n" | nc localhost 7072
 	echo -en "attr global serverVersion 0.01\nquit\n" | nc localhost 7072 #https://forum.fhem.de/index.php/topic,66616.0.html
+	# save all and restart fhem to load yeelight module
 	echo -en "save\nquit\n" | nc localhost 7072
+	echo -en "shutdown restart\nquit\n" | nc localhost 7072
 fi
 
 
