@@ -48,6 +48,7 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	sudo systemctl restart "snips*"
 
 	echo "####MQTT for FHEM####"
+	sudo PERL_MM_USE_DEFAULT=1 cpan -i CPAN 
 	sudo cpan install Net::MQTT::Simple::SSL
 	sudo cpan install Net::MQTT::Constants
 	sudo apt-get -y install mosquitto mosquitto-clients
