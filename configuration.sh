@@ -36,10 +36,13 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	sudo apt-get install -y dirmngr
 
 	sudo bash -c  'echo "deb   https://raspbian.snips.ai/stretch stable main" > /etc/apt/sources.list.d/snips.list'
+	# try out both keyservers
 	sudo apt-key adv --keyserver pgp.surfnet.nl --recv-keys D4F50CDCA10A2849
+	sudo apt-key adv --keyserver pgp.mit.edu --recv-keys D4F50CDCA10A2849 
 	sudo apt-get update
 	sudo apt-get install -y snips-platform-voice
 	sudo apt-get install -y snips-watch
+	sudo apt-get install -y snips-injection
 
 	echo "####configure snips####"
 	sudo rm -r /usr/share/snips/assistant
@@ -47,11 +50,68 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	sudo chmod 777 /usr/share/snips/assistant
 	sudo systemctl restart "snips*"
 
-	echo "####MQTT for FHEM####"
+	echo "####install MQTT for FHEM####"
 	sudo PERL_MM_USE_DEFAULT=1 cpan -i CPAN 
 	sudo cpan install Net::MQTT::Simple::SSL
 	sudo cpan install Net::MQTT::Constants
 	sudo apt-get -y install mosquitto mosquitto-clients
+	
+	echo "####set autosave and create####"
+	
+	echo -en '\
+	attr global autosave 1 \
+	\nquit\n' | nc localhost 7072
+	
+	echo "####configure MQTT for FHEM####"
+	
+	echo -en '\
+	define mqtt MQTT 127.0.0.1:1883; \
+	define snipsListener MQTT_DEVICE; \
+	attr snipsListener IODev mqtt; \
+	attr snipsListener publishSet_talk hermes/tts/say; \
+	attr snipsListener stateFormat transmission-state; \
+	attr snipsListener subscribeReading_hotword hermes/hotword/default/detected; \
+	attr snipsListener subscribeReading_state hermes/asr/textCaptured; \
+	define parseJson expandJSON snipsListener:json:.{.*}; \
+	define nParseJson notify snipsListener setreading snipsListener json $EVENT; \
+	define nTalk notify snipsListener:text:.* set talk $EVENT; \
+	define nTalkAnswer notify talk:answers:.* {system('\''mosquitto_pub -h localhost -p 1883 -t hermes/tts/say -m "{\"text\":\"'\''.ReadingsVal("talk","answers","").'\''\",\"lang\":\"de\",\"siteId\":\"default\"}"'\'')}; \
+	define nTalkErr notify talk:err:.* {system('\''mosquitto_pub -h localhost -p 1883 -t hermes/tts/say -m "{\"text\":\"'\''.(["ich weiß es nicht","ich habe dich nicht verstanden"]->[rand(3)]).'\''\",\"lang\":\"de\",\"siteId\":\"default\"}"'\'')}; \
+	save; \
+	\nquit\n' | nc localhost 7072
+	
+	echo -en '\
+	define updateKi dummy;\
+	attr updateKi userattr type;\
+	attr updateKi type Switch; \
+	attr updateKi room hidden;\
+	attr updateKi setList off on;\
+	attr updateKi userattr updateKiDevices updateKiRooms
+	attr updateKi updateKiDevices ["Badlicht","Kuechenlicht","Wohnzimmerlicht"];\
+	setreading updateKi piwit configuration;\
+	define nupdateKiON notify updateKi:on { my @rooms;;my @devices;;foreach my $dev (devspec2array("piwit=device")){foreach my $device (split(",",AttrVal($dev,"alias",$dev))){push @devices,$device if (!grep(/^$device$/,@devices))};;foreach my $room (split(",",AttrVal($dev,"room",""))){push @rooms,$room if (!grep(/^$room$/,@rooms));;}};;fhem("attr talk T2F_keywordlist &devices = ".join(",",sort @devices)."\\n&rooms = ".join(",",sort @rooms));;fhem("attr updateKi updateKiDevices [\"".join("\",\"",sort @devices)."\"]");;fhem("attr updateKi updateKiRooms [\"".join("\",\"",sort @rooms)."\"]");; \
+	system("echo '\''{\"operations\":[[\"addFromVanilla\",{\"geraet\":".AttrVal("updateKi","updateKiDevices","")."}]]}\'\'' > injections.json && mosquitto_pub -t hermes/injection/perform -f injections.json");;\
+	system("echo '\''{\"operations\":[[\"addFromVanilla\",{\"ort\":".AttrVal("updateKi","updateKiRooms","")."}]]}\'\'' > injections.json && mosquitto_pub -t hermes/injection/perform -f injections.json");;\
+	};\
+	save; \
+	\nquit\n' | nc localhost 7072
+	
+	#--original
+	#define nupdateKiON notify updateKi:on { my @rooms;;my @devices;;foreach my $dev (devspec2array("piwit=device")){foreach my $device (split(",",AttrVal($dev,"alias",$dev))){push @devices,$device if (!grep(/^$device$/,@devices))};;foreach my $room (split(",",AttrVal($dev,"room",""))){push @rooms,$room if (!grep(/^$room$/,@rooms));;}};;fhem("attr talk T2F_keywordlist &devices = ".join(",",sort @devices)."\\n&rooms = ".join(",",sort @rooms));;};\
+	#echo '{"operations":[["addFromVanilla",{"geraet":["Badlicht","Kuechenlicht","Wohnzimmerlicht"]}]]}' > injections.json && mosquitto_pub -t hermes/injection/perform -f injections.json
+	#--- ok funktioniert
+	#system("echo '{\"operations\":[[\"addFromVanilla\",{\"geraet\":[\"Badlicht\",\"Kuechenlicht\",\"Wohnzimmerlicht\"]}]]}' > injections.json && mosquitto_pub -t hermes/injection/perform -f injections.json");;
+	#echo -en '\
+	#attr talk T2F_keywordlist &devices = flurr \\
+	#&rooms = flurr\	
+	#\nquit\n' | nc localhost 7072
+			
+	echo -en '\
+	modify talk \
+	(zustand|status|ist|welchen|hat) (.*) (@devices)(.*)? = ( answer => {(Value((devspec2array("a:alias~$3"))[0]) || (Value("$3")) ||  "ich weiß es nicht")} ) \
+	?(bitte) && (@devices) && (\S+)(schalten|machen)?$ = (cmd=>"set $2@.* $3{true=>on, false=>off};; set a:alias~$2@.* $3{true=>on, false=>off}", answer => {"ok"} ) \
+	?(bitte) && alle && (@rooms) && (\S+)(schalten|machen)?$ = (cmd=>"set room=.*$2@.* $3{true=>on, false=>off}", answer => {"ok"} )\
+	\nquit\n' | nc localhost 7072
 	
 	echo "####install nmap####"
 	apt-get install -y libnmap-parser-perl
@@ -75,7 +135,7 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	sudo echo "yes" | sudo cpan Crypt/OpenSSL/AES.pm
 	echo "####configure broadlink####"
 	echo -en '\
-	define nBroadlinkUpdateIP notify ipScanner:.*_macVendor:.*Broadlin.* {my $macvendortomac=$EVTPART0;;$macvendortomac=~s/_macVendor:/_macAddress/g;;my $ip=$macvendortomac;;$ip=~s/_macAddress//g;;my $mac=ReadingsVal("ipScanner",$macvendortomac,"noIP");;my $broadlinkname="Broadlink_".$mac;;$broadlinkname=~s/:/_/g;;if(exists($defs{$broadlinkname})&&InternalVal($broadlinkname,"HOST","noIP") ne $ip){fhem("modify ".$broadlinkname." ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;}elsif(!exists($defs{$broadlinkname})){fhem("define ".$broadlinkname." Broadlink ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;};;};\
+	define nBroadlinkUpdateIP notify ipScanner:.*_macVendor:.*Broadlin.* {my $macvendortomac=$EVTPART0;;$macvendortomac=~s/_macVendor:/_macAddress/g;;my $ip=$macvendortomac;;$ip=~s/_macAddress//g;;my $mac=ReadingsVal("ipScanner",$macvendortomac,"noIP");;my $broadlinkname="Broadlink_".$mac;;$broadlinkname=~s/:/_/g;;if(exists($defs{$broadlinkname})&&InternalVal($broadlinkname,"HOST","noIP") ne $ip){fhem("modify ".$broadlinkname." ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;}elsif(!exists($defs{$broadlinkname})){fhem("define ".$broadlinkname." Broadlink ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("setreading ".$broadlinkname." piwit device");;fhem("save");;};;};\
 	attr nBroadlinkUpdateIP userattr piwit;\
 	\nquit\n' | nc localhost 7072
 	
@@ -89,7 +149,7 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	echo "####configure YeeLight####"
 	#define YeeLight_34_CE_00_8B_63_93 YeeLight 192.168.2.105
 	echo -en '\
-	define nYeelightUpdateIP notify ipScanner:.*_ip:.* {my $iptomac=$EVTPART0;;$iptomac=~s/_ip:/_macAddress/g;;my $mac=ReadingsVal("ipScanner",$iptomac,"noIP");;if(index($mac,"34:CE:00")>=0){my $yeename="YeeLight_".$mac;;$yeename=~s/:/_/g;;if(exists($defs{$yeename})&&InternalVal($yeename,"HOST","noIP") ne $EVTPART1){fhem("modify ".$yeename." ".$EVTPART1);;}elsif(!exists($defs{$yeename})){fhem("define ".$yeename." YeeLight ".$EVTPART1);;};;};;};\
+	define nYeelightUpdateIP notify ipScanner:.*_ip:.* {my $iptomac=$EVTPART0;;$iptomac=~s/_ip:/_macAddress/g;;my $mac=ReadingsVal("ipScanner",$iptomac,"noIP");;if(index($mac,"34:CE:00")>=0){my $yeename="YeeLight_".$mac;;$yeename=~s/:/_/g;;if(exists($defs{$yeename})&&InternalVal($yeename,"HOST","noIP") ne $EVTPART1){fhem("modify ".$yeename." ".$EVTPART1);;}elsif(!exists($defs{$yeename})){fhem("define ".$yeename." YeeLight ".$EVTPART1);;fhem("setreading ".$yeename." piwit device");;};;};;};\
 	attr nYeelightUpdateIP userattr piwit;\
 	\nquit\n' | nc localhost 7072
 	
