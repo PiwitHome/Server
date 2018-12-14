@@ -60,14 +60,11 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	#piwit: device|technical, type (light,camera...)
 	#piwitDisplay: Homescreen -> displayed on homescreen
 	echo -en '\
-	{fhem("attr global userattr ".AttrVal("global","userattr","")." piwit piwitDisplay setListt piwitTalkExplanation_DE serverVersion")}; \
+	{fhem("attr global userattr ".AttrVal("global","userattr","")." piwit piwitDisplay setListt piwitTalkExplanationDE serverVersion")}; \
 	\nquit\n' | nc localhost 7072
 	
-	
-	echo "####set autosave and create####"
-	
 	echo -en '\
-	attr global autosave 1 \
+	save; \
 	\nquit\n' | nc localhost 7072
 	
 	echo "####configure MQTT for FHEM####"
@@ -180,7 +177,7 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	attr ScenarioList piwit list,scenarios
 	attr ScenarioList piwitDisplay Homescreen
 	attr ScenarioList useSetExtensions 1
-	attr ScenarioList piwitTalkExplanation_DE Ich möchte gerne schlafengehen, aufstehen, fernsehen schauen oder wie auch immer du dir dein scenario erstellt hast
+	attr ScenarioList piwitTalkExplanationDE Ich möchte gerne schlafengehen, aufstehen, fernsehen schauen oder wie auch immer du dir dein scenario erstellt hast
 	define ScenarioListOn notify ScenarioList {fhem("set ".$EVENT." on;;")}
 	\nquit\n' | nc localhost 7072
 	
