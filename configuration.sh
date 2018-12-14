@@ -60,7 +60,7 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	#piwit: device|technical, type (light,camera...)
 	#piwitDisplay: Homescreen -> displayed on homescreen
 	echo -en '\
-	{fhem("attr global userattr ".AttrVal("global","userattr","")." piwit piwitDisplay setListt")}; \
+	{fhem("attr global userattr ".AttrVal("global","userattr","")." piwit piwitDisplay setListt piwitTalkExplanation_DE serverVersion")}; \
 	\nquit\n' | nc localhost 7072
 	
 	
@@ -93,13 +93,13 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	attr updateKi userattr type;\
 	attr updateKi type Switch; \
 	attr updateKi room hidden;\
-	attr updateKi piwitHome noHomescreen;\
+	attr updateKi piwitDisplay noHomescreen;\
 	attr updateKi piwit technical,updateKi;\
 	attr updateKi setList off on;\
 	attr updateKi userattr updateKiDevices updateKiRooms
 	attr updateKi updateKiDevices ["Badlicht","Kuechenlicht","Wohnzimmerlicht"];\
 	setreading updateKi piwit configuration;\
-	define nupdateKiON notify updateKi:on { my @rooms;;my @devices;;foreach my $dev (devspec2array("piwit=device")){foreach my $device (split(",",AttrVal($dev,"alias",$dev))){push @devices,$device if (!grep(/^$device$/,@devices))};;foreach my $room (split(",",AttrVal($dev,"room",""))){push @rooms,$room if (!grep(/^$room$/,@rooms));;}};;fhem("attr talk T2F_keywordlist &devices = ".join(",",sort @devices)."\\n&rooms = ".join(",",sort @rooms));;fhem("attr updateKi updateKiDevices [\"".join("\",\"",sort @devices)."\"]");;fhem("attr updateKi updateKiRooms [\"".join("\",\"",sort @rooms)."\"]");; \
+	define nupdateKiON notify updateKi:on { my @rooms;;my @devices;;foreach my $dev (devspec2array("piwit=device.*")){foreach my $device (split(",",AttrVal($dev,"alias",$dev))){push @devices,$device if (!grep(/^$device$/,@devices))};;foreach my $room (split(",",AttrVal($dev,"room",""))){push @rooms,$room if (!grep(/^$room$/,@rooms));;}};;fhem("attr talk T2F_keywordlist &devices = ".join(",",sort @devices)."\\n&rooms = ".join(",",sort @rooms));;fhem("attr updateKi updateKiDevices [\"".join("\",\"",sort @devices)."\"]");;fhem("attr updateKi updateKiRooms [\"".join("\",\"",sort @rooms)."\"]");; \
 	system("echo '\''{\"operations\":[[\"addFromVanilla\",{\"geraet\":".AttrVal("updateKi","updateKiDevices","")."}]]}\'\'' > injections.json && mosquitto_pub -t hermes/injection/perform -f injections.json");;\
 	system("echo '\''{\"operations\":[[\"addFromVanilla\",{\"ort\":".AttrVal("updateKi","updateKiRooms","")."}]]}\'\'' > injections.json && mosquitto_pub -t hermes/injection/perform -f injections.json");;\
 	};\
@@ -117,6 +117,8 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	#\nquit\n' | nc localhost 7072
 			
 	echo -en '\
+	define talk Talk2Fhem;\
+	set updateKi on; \ 
 	modify talk \
 	(zustand|status|ist|welchen|hat) (.*) (@devices)(.*)? = ( answer => {(Value((devspec2array("a:alias~$3"))[0]) || (Value("$3")) ||  "ich weiß es nicht")} ) \
 	?(bitte) && (@devices) && (\S+)(schalten|machen)?$ = (cmd=>"set $2@.* $3{true=>on, false=>off};; set a:alias~$2@.* $3{true=>on, false=>off}", answer => {"ok"} ) \
@@ -145,7 +147,7 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	sudo echo "yes" | sudo cpan Crypt/OpenSSL/AES.pm
 	echo "####configure broadlink####"
 	echo -en '\
-	define nBroadlinkUpdateIP notify ipScanner:.*_macVendor:.*Broadlin.* {my $macvendortomac=$EVTPART0;;$macvendortomac=~s/_macVendor:/_macAddress/g;;my $ip=$macvendortomac;;$ip=~s/_macAddress//g;;my $mac=ReadingsVal("ipScanner",$macvendortomac,"noIP");;my $broadlinkname="Broadlink_".$mac;;$broadlinkname=~s/:/_/g;;if(exists($defs{$broadlinkname})&&InternalVal($broadlinkname,"HOST","noIP") ne $ip){fhem("modify ".$broadlinkname." ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;}elsif(!exists($defs{$broadlinkname})){fhem("define ".$broadlinkname." Broadlink ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("setreading ".$broadlinkname." piwit device");;fhem("save");;};;};\
+	define nBroadlinkUpdateIP notify ipScanner:.*_macVendor:.*Broadlin.* {my $macvendortomac=$EVTPART0;;$macvendortomac=~s/_macVendor:/_macAddress/g;;my $ip=$macvendortomac;;$ip=~s/_macAddress//g;;my $mac=ReadingsVal("ipScanner",$macvendortomac,"noIP");;my $broadlinkname="Broadlink_".$mac;;$broadlinkname=~s/:/_/g;;if(exists($defs{$broadlinkname})&&InternalVal($broadlinkname,"HOST","noIP") ne $ip){fhem("modify ".$broadlinkname." ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;}elsif(!exists($defs{$broadlinkname})){fhem("define ".$broadlinkname." Broadlink ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;};;};\
 	attr nBroadlinkUpdateIP userattr piwit;\
 	\nquit\n' | nc localhost 7072
 	
@@ -178,6 +180,7 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	attr ScenarioList piwit list,scenarios
 	attr ScenarioList piwitDisplay Homescreen
 	attr ScenarioList useSetExtensions 1
+	attr ScenarioList piwitTalkExplanation_DE Ich möchte gerne schlafengehen, aufstehen, fernsehen schauen oder wie auch immer du dir dein scenario erstellt hast
 	define ScenarioListOn notify ScenarioList {fhem("set ".$EVENT." on;;")}
 	\nquit\n' | nc localhost 7072
 	
@@ -193,8 +196,15 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	define LightsceneList_StartLightsceneYeeLight notify YeeLight.*:Lightscene:.* {fhem("attr ".$EVTPART1." lightSceneDevice ".$NAME);;fhem("set ".$EVTPART1." on ");;};\
 	\nquit\n' | nc localhost 7072
 	
+	# sound to 100% - later the user can configure it
+	sudo amixer set PCM -- 100%
+	
+	echo -en '\
+	setreading talk answers Hallo ich heiße Snips. Du kannst jetzt die Appp starten und Geräte anlegen. Wenn du hilfe zu einem Gerät brauchst sag einfach, hey snips, hilf mir bitte mit dem Wohnzimmerlicht; \
+	\nquit\n' | nc localhost 7072
+	
 	# set first serverVersion :)
-	echo -en "attr global userattr serverVersion\nquit\n" | nc localhost 7072
+	#echo -en "attr global userattr serverVersion\nquit\n" | nc localhost 7072
 	echo -en "attr global serverVersion 0.01\nquit\n" | nc localhost 7072 #https://forum.fhem.de/index.php/topic,66616.0.html
 	# save all and restart fhem to load yeelight module
 	echo -en "save\nquit\n" | nc localhost 7072
