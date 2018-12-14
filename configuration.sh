@@ -56,6 +56,14 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	sudo cpan install Net::MQTT::Constants
 	sudo apt-get -y install mosquitto mosquitto-clients
 	
+	echo "####set global Attributes####"
+	#piwit: device|technical, type (light,camera...)
+	#piwitDisplay: Homescreen -> displayed on homescreen
+	echo -en '\
+	{fhem("attr global userattr ".AttrVal("global","userattr","")." piwit piwitDisplay setListt")}; \
+	\nquit\n' | nc localhost 7072
+	
+	
 	echo "####set autosave and create####"
 	
 	echo -en '\
@@ -85,6 +93,8 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	attr updateKi userattr type;\
 	attr updateKi type Switch; \
 	attr updateKi room hidden;\
+	attr updateKi piwitHome noHomescreen;\
+	attr updateKi piwit technical,updateKi;\
 	attr updateKi setList off on;\
 	attr updateKi userattr updateKiDevices updateKiRooms
 	attr updateKi updateKiDevices ["Badlicht","Kuechenlicht","Wohnzimmerlicht"];\
@@ -147,10 +157,40 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	\nquit\n' | nc localhost 7072
 	
 	echo "####configure YeeLight####"
+	echo -en '\
+	define LightsceneList dummy; \
+	attr LightsceneList room hidden; \
+	attr LightsceneList setList Select.. on off; \
+	attr LightsceneList piwit list,lightsceens; \
+	attr LightsceneList piwitDisplay Homescreen; \
+	define LightsceneList_UpdateYeelightLightscenes notify LightsceneList:updateList:.* {fhem("attr YeeLight.* setListt ".AttrVal("LightsceneList","setList","Na"));;fhem("attr PiwitHue.* userattr setListt");;fhem("attr PiwitHue.* setListt ".AttrVal("LightsceneList","setList","Na"));;fhem("save");;}
+	\nquit\n' | nc localhost 7072
+	
+	echo "####ScenarioList,WeekdayTimer List, EventList####"
+	echo -en '\
+	define ScenarioList dummy
+	attr ScenarioList userattr ScenarioList EventList WeekdayTimer
+	attr ScenarioList EventList Select.. 
+	attr ScenarioList WeekdayTimer 
+	attr ScenarioList room hidden
+	attr ScenarioList setList Select.. 
+	attr ScenarioList sortby setList
+	attr ScenarioList piwit list,scenarios
+	attr ScenarioList piwitDisplay Homescreen
+	attr ScenarioList useSetExtensions 1
+	define ScenarioListOn notify ScenarioList {fhem("set ".$EVENT." on;;")}
+	\nquit\n' | nc localhost 7072
+	
+	
 	#define YeeLight_34_CE_00_8B_63_93 YeeLight 192.168.2.105
 	echo -en '\
-	define nYeelightUpdateIP notify ipScanner:.*_ip:.* {my $iptomac=$EVTPART0;;$iptomac=~s/_ip:/_macAddress/g;;my $mac=ReadingsVal("ipScanner",$iptomac,"noIP");;if(index($mac,"34:CE:00")>=0){my $yeename="YeeLight_".$mac;;$yeename=~s/:/_/g;;if(exists($defs{$yeename})&&InternalVal($yeename,"HOST","noIP") ne $EVTPART1){fhem("modify ".$yeename." ".$EVTPART1);;}elsif(!exists($defs{$yeename})){fhem("define ".$yeename." YeeLight ".$EVTPART1);;fhem("setreading ".$yeename." piwit device");;};;};;};\
-	attr nYeelightUpdateIP userattr piwit;\
+	define nYeelightUpdateIP notify ipScanner:.*_ip:.* {my $iptomac=$EVTPART0;;$iptomac=~s/_ip:/_macAddress/g;;my $mac=ReadingsVal("ipScanner",$iptomac,"noIP");;if(index($mac,"34:CE:00")>=0){my $yeename="YeeLight_".$mac;;$yeename=~s/:/_/g;;if(exists($defs{$yeename})&&InternalVal($yeename,"HOST","noIP") ne $EVTPART1){fhem("modify ".$yeename." ".$EVTPART1);;}elsif(!exists($defs{$yeename})){fhem("define ".$yeename." YeeLight ".$EVTPART1);;fhem("attr ".$yeename." piwit device,light");;fhem("attr ".$yeename." piwitDisplay Homescreen");;};;};;};\
+	attr nYeelightUpdateIP piwit notify,yeelight;\
+	\nquit\n' | nc localhost 7072
+	# on new YeeLight add lightsceen list and reading Lightscene,  
+	echo -en '\
+	define nYeeLightAddeddefine notify global:DEFINED.*YeeLight.* {fhem("attr ".$EVTPART1." setListt ".AttrVal("LightsceneList","setList","Na"));;fhem("setreading ".$EVTPART1." Lightscene ".AttrVal("LightsceneList","setList","Na"));;fhem("attr ".$EVTPART1." piwitDisplay Homescreen");;fhem("save");;};\
+	define LightsceneList_StartLightsceneYeeLight notify YeeLight.*:Lightscene:.* {fhem("attr ".$EVTPART1." lightSceneDevice ".$NAME);;fhem("set ".$EVTPART1." on ");;};\
 	\nquit\n' | nc localhost 7072
 	
 	# set first serverVersion :)
