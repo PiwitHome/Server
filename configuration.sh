@@ -56,6 +56,19 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	sudo cpan install Net::MQTT::Constants
 	sudo apt-get -y install mosquitto mosquitto-clients
 	
+	echo "####install nmap####"
+	apt-get install -y libnmap-parser-perl
+	
+	echo "####install broadlink####"
+	sudo apt-get -y install libcrypt-cbc-perl
+	sudo apt-get -y install libcrypt-rijndael-perl
+	sudo apt -y install libssl-dev
+	export PERL_MM_USE_DEFAULT=1
+	sudo echo "yes" | sudo cpan Crypt/OpenSSL/AES.pm
+	
+	echo "####install YeeLight####"
+	sudo cpan install JSON::XS
+	
 	echo "####set global Attributes####"
 	#piwit: device|technical, type (light,camera...)
 	#piwitDisplay: Homescreen -> displayed on homescreen
@@ -115,15 +128,12 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 			
 	echo -en '\
 	define talk Talk2Fhem;\
-	set updateKi on; \ 
 	modify talk \
 	(zustand|status|ist|welchen|hat) (.*) (@devices)(.*)? = ( answer => {(Value((devspec2array("a:alias~$3"))[0]) || (Value("$3")) ||  "ich weiß es nicht")} ) \
 	?(bitte) && (@devices) && (\S+)(schalten|machen)?$ = (cmd=>"set $2@.* $3{true=>on, false=>off};; set a:alias~$2@.* $3{true=>on, false=>off}", answer => {"ok"} ) \
 	?(bitte) && alle && (@rooms) && (\S+)(schalten|machen)?$ = (cmd=>"set room=.*$2@.* $3{true=>on, false=>off}", answer => {"ok"} )\
 	\nquit\n' | nc localhost 7072
 	
-	echo "####install nmap####"
-	apt-get install -y libnmap-parser-perl
 	
 	echo "####configure nmap####"
 	echo -en '\
@@ -136,20 +146,13 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	define nIPScannerSetIP notify ipScanner:running {my $a=`ip -f inet addr show | grep -Po "inet \\\K[\\\d.]+/24"`;;$a=~s/\\n//g;;Log 1, $a;; fhem("modify ipScanner ".$a);;}\
 	\nquit\n' | nc localhost 7072
 	
-	echo "####install broadlink####"
-	sudo apt-get -y install libcrypt-cbc-perl
-	sudo apt-get -y install libcrypt-rijndael-perl
-	sudo apt -y install libssl-dev
-	export PERL_MM_USE_DEFAULT=1
-	sudo echo "yes" | sudo cpan Crypt/OpenSSL/AES.pm
 	echo "####configure broadlink####"
 	echo -en '\
 	define nBroadlinkUpdateIP notify ipScanner:.*_macVendor:.*Broadlin.* {my $macvendortomac=$EVTPART0;;$macvendortomac=~s/_macVendor:/_macAddress/g;;my $ip=$macvendortomac;;$ip=~s/_macAddress//g;;my $mac=ReadingsVal("ipScanner",$macvendortomac,"noIP");;my $broadlinkname="Broadlink_".$mac;;$broadlinkname=~s/:/_/g;;if(exists($defs{$broadlinkname})&&InternalVal($broadlinkname,"HOST","noIP") ne $ip){fhem("modify ".$broadlinkname." ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;}elsif(!exists($defs{$broadlinkname})){fhem("define ".$broadlinkname." Broadlink ".$ip." ".$mac." rmpro");;fhem("set ".$broadlinkname." getTemperature");;fhem("save");;};;};\
 	attr nBroadlinkUpdateIP userattr piwit;\
 	\nquit\n' | nc localhost 7072
 	
-	echo "####install YeeLight####"
-	sudo cpan install JSON::XS
+	echo "####configure YeeLight####"
 	echo -en '\
 	update all https://raw.githubusercontent.com/thaliondrambor/32_YeeLight.pm/master/controls_YeeLight.txt;\
 	reload 32_YeeLight.pm;\
@@ -193,12 +196,25 @@ if !(sudo grep -Po "serverVersion \K\d+\.*\d*" /opt/fhem/fhem.cfg); then
 	define LightsceneList_StartLightsceneYeeLight notify YeeLight.*:Lightscene:.* {fhem("attr ".$EVTPART1." lightSceneDevice ".$NAME);;fhem("set ".$EVTPART1." on ");;};\
 	\nquit\n' | nc localhost 7072
 	
+	
+	
+	
+	echo "####Run the IP Scanner####"
+	echo -en '\
+	set ipScanner statusRequest; \
+	\nquit\n' | nc localhost 7072
+	
 	# sound to 100% - later the user can configure it
 	sudo amixer set PCM -- 100%
 	
+	echo "####Welcome Text####"
 	echo -en '\
 	setreading talk answers Hallo ich heiße Snips. Du kannst jetzt die Appp starten und Geräte anlegen. Wenn du hilfe zu einem Gerät brauchst sag einfach, hey snips, hilf mir bitte mit dem Wohnzimmerlicht; \
 	\nquit\n' | nc localhost 7072
+	
+	#echo -en '\
+	#set updateKi on; \ 
+	#\nquit\n' | nc localhost 7072
 	
 	# set first serverVersion :)
 	#echo -en "attr global userattr serverVersion\nquit\n" | nc localhost 7072
