@@ -2,6 +2,8 @@
 
 #https://github.com/PiwitHome/Server.git 
 
+
+
 echo "####install FHEM####"
 if ! grep -q "^deb http://debian.fhem.de/nightly/ /" /etc/apt/sources.list /etc/apt/sources.list.d/*; then
 	sudo wget -qO - http://debian.fhem.de/archive.key | sudo apt-key add -
